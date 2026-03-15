@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Plus, CheckCircle2, Circle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, orderBy } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { supabase } from '../supabase';
 
 interface PlanItem {
   id: string;
@@ -20,40 +19,56 @@ export const StudyPlanner: React.FC = () => {
   const [newPlan, setNewPlan] = useState({ day: 'Mon', subject: '' });
 
   useEffect(() => {
-    if (!auth.currentUser) return;
+    fetchPlans();
 
-    const q = query(
-      collection(db, 'planner'),
-      where('uid', '==', auth.currentUser.uid),
-      orderBy('createdAt', 'asc')
-    );
+    // Subscribe to changes
+    const channel = supabase
+      .channel('planner_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'planner' }, () => {
+        fetchPlans();
+      })
+      .subscribe();
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const plansData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as PlanItem[];
-      setPlans(plansData);
-    }, (error) => {
-      console.error("Firestore Error (Planner):", error);
-    });
-
-    return () => unsubscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
+  const fetchPlans = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('planner')
+      .select('*')
+      .eq('uid', user.id)
+      .order('createdAt', { ascending: true });
+
+    if (error) {
+      console.error("Supabase Error (Planner):", error);
+    } else {
+      setPlans(data as PlanItem[]);
+    }
+  };
+
   const addPlan = async () => {
-    if (!newPlan.subject || !auth.currentUser) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!newPlan.subject || !user) return;
     
     try {
-      await addDoc(collection(db, 'planner'), {
-        uid: auth.currentUser.uid,
+      const { error } = await supabase.from('planner').insert([{
+        uid: user.id,
         day: newPlan.day,
         subject: newPlan.subject,
         status: 'pending',
         createdAt: Date.now(),
-      });
+      }]);
+
+      if (error) throw error;
+
       setNewPlan({ day: 'Mon', subject: '' });
       setIsAdding(false);
+      fetchPlans();
     } catch (error) {
       console.error("Error adding plan:", error);
     }
@@ -61,9 +76,13 @@ export const StudyPlanner: React.FC = () => {
 
   const toggleStatus = async (id: string, currentStatus: string) => {
     try {
-      await updateDoc(doc(db, 'planner', id), {
-        status: currentStatus === 'completed' ? 'pending' : 'completed'
-      });
+      const { error } = await supabase
+        .from('planner')
+        .update({ status: currentStatus === 'completed' ? 'pending' : 'completed' })
+        .eq('id', id);
+
+      if (error) throw error;
+      fetchPlans();
     } catch (error) {
       console.error("Error updating plan:", error);
     }

@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Trash2, Tag } from 'lucide-react';
 import { Note, Subject } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { supabase } from '../supabase';
 
 const SUBJECT_COLORS: Record<Subject, string> = {
   Math: 'bg-blue-500',
@@ -24,41 +23,57 @@ export const Notes: React.FC = () => {
   });
 
   useEffect(() => {
-    if (!auth.currentUser) return;
+    fetchNotes();
 
-    const q = query(
-      collection(db, 'notes'),
-      where('uid', '==', auth.currentUser.uid),
-      orderBy('createdAt', 'desc')
-    );
+    // Subscribe to changes
+    const channel = supabase
+      .channel('notes_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, () => {
+        fetchNotes();
+      })
+      .subscribe();
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const notesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Note[];
-      setNotes(notesData);
-    }, (error) => {
-      console.error("Firestore Error (Notes):", error);
-    });
-
-    return () => unsubscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
+  const fetchNotes = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('uid', user.id)
+      .order('createdAt', { ascending: false });
+
+    if (error) {
+      console.error("Supabase Error (Notes):", error);
+    } else {
+      setNotes(data as Note[]);
+    }
+  };
+
   const addNote = async () => {
-    if (!newNote.title || !newNote.content || !auth.currentUser) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!newNote.title || !newNote.content || !user) return;
     
     try {
-      await addDoc(collection(db, 'notes'), {
-        uid: auth.currentUser.uid,
+      const { error } = await supabase.from('notes').insert([{
+        uid: user.id,
         title: newNote.title,
         content: newNote.content,
         subject: newNote.subject as Subject,
         color: SUBJECT_COLORS[newNote.subject as Subject],
         createdAt: Date.now(),
-      });
+      }]);
+      
+      if (error) throw error;
+
       setNewNote({ title: '', content: '', subject: 'Other' });
       setIsAdding(false);
+      fetchNotes();
     } catch (error) {
       console.error("Error adding note:", error);
     }
@@ -66,7 +81,9 @@ export const Notes: React.FC = () => {
 
   const deleteNote = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'notes', id));
+      const { error } = await supabase.from('notes').delete().eq('id', id);
+      if (error) throw error;
+      fetchNotes();
     } catch (error) {
       console.error("Error deleting note:", error);
     }

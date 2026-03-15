@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, ChevronLeft, ChevronRight, RotateCw, Brain } from 'lucide-react';
 import { Flashcard, Subject } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { supabase } from '../supabase';
 
 const SUBJECT_COLORS: Record<Subject, string> = {
   Math: 'bg-blue-500',
@@ -25,40 +24,56 @@ export const Flashcards: React.FC = () => {
   });
 
   useEffect(() => {
-    if (!auth.currentUser) return;
+    fetchCards();
 
-    const q = query(
-      collection(db, 'flashcards'),
-      where('uid', '==', auth.currentUser.uid),
-      orderBy('createdAt', 'desc')
-    );
+    // Subscribe to changes
+    const channel = supabase
+      .channel('flashcards_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'flashcards' }, () => {
+        fetchCards();
+      })
+      .subscribe();
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const cardsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Flashcard[];
-      setCards(cardsData);
-    }, (error) => {
-      console.error("Firestore Error (Flashcards):", error);
-    });
-
-    return () => unsubscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
+  const fetchCards = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('flashcards')
+      .select('*')
+      .eq('uid', user.id)
+      .order('createdAt', { ascending: false });
+
+    if (error) {
+      console.error("Supabase Error (Flashcards):", error);
+    } else {
+      setCards(data as Flashcard[]);
+    }
+  };
+
   const addCard = async () => {
-    if (!newCard.front || !newCard.back || !auth.currentUser) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!newCard.front || !newCard.back || !user) return;
     
     try {
-      await addDoc(collection(db, 'flashcards'), {
-        uid: auth.currentUser.uid,
+      const { error } = await supabase.from('flashcards').insert([{
+        uid: user.id,
         front: newCard.front,
         back: newCard.back,
         subject: newCard.subject as Subject,
         createdAt: Date.now(),
-      });
+      }]);
+
+      if (error) throw error;
+
       setNewCard({ front: '', back: '', subject: 'Other' });
       setIsAdding(false);
+      fetchCards();
     } catch (error) {
       console.error("Error adding card:", error);
     }
@@ -66,10 +81,13 @@ export const Flashcards: React.FC = () => {
 
   const deleteCard = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'flashcards', id));
+      const { error } = await supabase.from('flashcards').delete().eq('id', id);
+      if (error) throw error;
+
       if (currentIndex >= cards.length - 1 && cards.length > 1) {
         setCurrentIndex(cards.length - 2);
       }
+      fetchCards();
     } catch (error) {
       console.error("Error deleting card:", error);
     }

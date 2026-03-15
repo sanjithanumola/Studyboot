@@ -15,8 +15,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User as FirebaseUser } from 'firebase/auth';
-import { auth } from './firebase';
+import { supabase } from './supabase';
+import { User as SupabaseUser } from '@supabase/supabase-js';
 import { Timer } from './components/Timer';
 import { Notes } from './components/Notes';
 import { AIHelper } from './components/AIHelper';
@@ -29,34 +29,37 @@ type Page = 'landing' | 'dashboard' | 'progress' | 'profile';
 
 export default function App() {
   const [activePage, setActivePage] = useState<Page>('landing');
-  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
       setIsAuthReady(true);
-      if (user) {
+      if (session?.user) {
         setActivePage('dashboard');
       } else {
         setActivePage('landing');
       }
     });
-    return () => unsubscribe();
-  }, []);
 
-  const handleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Login error:", error);
-    }
-  };
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        setActivePage('dashboard');
+      } else {
+        setActivePage('landing');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await supabase.auth.signOut();
     } catch (error) {
       console.error("Logout error:", error);
     }
@@ -75,7 +78,7 @@ export default function App() {
   }
 
   if (activePage === 'landing' && !user) {
-    return <Landing onStart={handleLogin} />;
+    return <Landing />;
   }
 
   return (
@@ -141,12 +144,12 @@ export default function App() {
             </button>
             <div className="flex items-center gap-3 pl-6 border-l border-white/5">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold">{user?.displayName || 'Student'}</p>
+                <p className="text-sm font-bold">{user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Student'}</p>
                 <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Student</p>
               </div>
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 p-[2px]">
                 <div className="w-full h-full rounded-full bg-[#0a0a1a] flex items-center justify-center overflow-hidden">
-                  <img src={user?.photoURL || "https://picsum.photos/seed/student/100/100"} alt="Avatar" referrerPolicy="no-referrer" />
+                  <img src={user?.user_metadata?.avatar_url || "https://picsum.photos/seed/student/100/100"} alt="Avatar" referrerPolicy="no-referrer" />
                 </div>
               </div>
             </div>
