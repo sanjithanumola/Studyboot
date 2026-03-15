@@ -26,10 +26,10 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
             </div>
             <button 
               onClick={onStart}
-              className="bg-white/5 hover:bg-white/10 border border-white/10 px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2"
+              className="bg-white text-black hover:bg-white/90 px-8 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-white/5"
             >
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-4 h-4" />
-              Sign In
+              Sign In with Google
             </button>
           </nav>
 
@@ -48,15 +48,15 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
               <p className="text-xl text-white/60 mb-12 max-w-2xl mx-auto leading-relaxed">
                 Focus better, remember faster, and organize smarter. StudyBoost brings all your essential study tools into one powerful dashboard.
               </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <div className="flex flex-col items-center justify-center gap-4">
                 <button 
                   onClick={onStart}
-                  className="bg-purple-500 hover:bg-purple-600 text-white px-8 py-4 rounded-2xl font-bold text-lg flex items-center gap-3 transition-all shadow-xl shadow-purple-500/20 group"
+                  className="w-full max-w-md bg-white text-black hover:bg-white/90 px-8 py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-4 transition-all shadow-xl shadow-white/10 group"
                 >
-                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6 bg-white rounded-full p-1" />
+                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6" />
                   Continue with Google
-                  <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                 </button>
+                <p className="text-white/40 text-sm">Join thousands of students boosting their productivity.</p>
               </div>
             </motion.div>
           </div>
