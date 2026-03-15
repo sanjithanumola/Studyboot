@@ -1,40 +1,72 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BookOpen, Plus, CheckCircle2, Circle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, orderBy } from 'firebase/firestore';
+import { db, auth } from '../firebase';
 
 interface PlanItem {
   id: string;
   day: string;
   subject: string;
   status: 'completed' | 'pending';
+  createdAt: number;
 }
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export const StudyPlanner: React.FC = () => {
-  const [plans, setPlans] = useState<PlanItem[]>([
-    { id: '1', day: 'Mon', subject: 'Math', status: 'completed' },
-    { id: '2', day: 'Tue', subject: 'Science', status: 'pending' },
-    { id: '3', day: 'Wed', subject: 'History', status: 'pending' },
-  ]);
+  const [plans, setPlans] = useState<PlanItem[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newPlan, setNewPlan] = useState({ day: 'Mon', subject: '' });
 
-  const addPlan = () => {
-    if (!newPlan.subject) return;
-    const plan: PlanItem = {
-      id: Math.random().toString(36).substr(2, 9),
-      day: newPlan.day,
-      subject: newPlan.subject,
-      status: 'pending',
-    };
-    setPlans([...plans, plan]);
-    setNewPlan({ day: 'Mon', subject: '' });
-    setIsAdding(false);
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const q = query(
+      collection(db, 'planner'),
+      where('uid', '==', auth.currentUser.uid),
+      orderBy('createdAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const plansData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as PlanItem[];
+      setPlans(plansData);
+    }, (error) => {
+      console.error("Firestore Error (Planner):", error);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const addPlan = async () => {
+    if (!newPlan.subject || !auth.currentUser) return;
+    
+    try {
+      await addDoc(collection(db, 'planner'), {
+        uid: auth.currentUser.uid,
+        day: newPlan.day,
+        subject: newPlan.subject,
+        status: 'pending',
+        createdAt: Date.now(),
+      });
+      setNewPlan({ day: 'Mon', subject: '' });
+      setIsAdding(false);
+    } catch (error) {
+      console.error("Error adding plan:", error);
+    }
   };
 
-  const toggleStatus = (id: string) => {
-    setPlans(plans.map(p => p.id === id ? { ...p, status: p.status === 'completed' ? 'pending' : 'completed' } : p));
+  const toggleStatus = async (id: string, currentStatus: string) => {
+    try {
+      await updateDoc(doc(db, 'planner', id), {
+        status: currentStatus === 'completed' ? 'pending' : 'completed'
+      });
+    } catch (error) {
+      console.error("Error updating plan:", error);
+    }
   };
 
   return (
@@ -88,7 +120,7 @@ export const StudyPlanner: React.FC = () => {
         {plans.map((plan) => (
           <div 
             key={plan.id}
-            onClick={() => toggleStatus(plan.id)}
+            onClick={() => toggleStatus(plan.id, plan.status)}
             className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 hover:bg-white/10 transition-all cursor-pointer group"
           >
             <div className="flex items-center gap-3">

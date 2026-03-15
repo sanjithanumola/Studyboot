@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "Note": {
+      "title": "Note",
+      "description": "A study note created by the user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "subject": { "type": "string" },
+        "color": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "uid", "title", "content", "subject", "createdAt"]
+    },
+    "Flashcard": {
+      "title": "Flashcard",
+      "description": "A memory card with front and back content.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "front": { "type": "string" },
+        "back": { "type": "string" },
+        "subject": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "uid", "front", "back", "subject", "createdAt"]
+    },
+    "PlanItem": {
+      "title": "PlanItem",
+      "description": "A scheduled study task.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "day": { "type": "string" },
+        "subject": { "type": "string" },
+        "status": { "type": "string", "enum": ["completed", "pending"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "uid", "day", "subject", "status", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User statistics and profile data.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "streak": { "type": "number" },
+        "totalStudyTime": { "type": "number" },
+        "lastStudyDate": { "type": "string" }
+      },
+      "required": ["uid", "email", "streak", "totalStudyTime"]
+    }
+  },
+  "firestore": {
+    "notes/{noteId}": {
+      "schema": "Note",
+      "description": "User study notes"
+    },
+    "flashcards/{cardId}": {
+      "schema": "Flashcard",
+      "description": "User flashcards"
+    },
+    "planner/{planId}": {
+      "schema": "PlanItem",
+      "description": "User study plans"
+    },
+    "users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile and stats"
+    }
+  }
+}

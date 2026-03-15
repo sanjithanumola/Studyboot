@@ -1,22 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { Send, Sparkles, Loader2, BookOpen, Lightbulb, List } from 'lucide-react';
+import { Send, Sparkles, Loader2, BookOpen, Lightbulb, List, Key, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+declare global {
+  interface Window {
+    aistudio: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
+  }
+}
 
 export const AIHelper: React.FC = () => {
   const [input, setInput] = useState('');
   const [explanation, setExplanation] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [mode, setMode] = useState<'simple' | 'detailed' | 'notes'>('simple');
+  const [hasKey, setHasKey] = useState<boolean>(false);
+
+  useEffect(() => {
+    checkKey();
+  }, []);
+
+  const checkKey = async () => {
+    if (window.aistudio) {
+      const selected = await window.aistudio.hasSelectedApiKey();
+      setHasKey(selected);
+    }
+  };
+
+  const handleConnectKey = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      setHasKey(true);
+    }
+  };
 
   const handleExplain = async () => {
     if (!input.trim()) return;
+    
+    if (!hasKey) {
+      await handleConnectKey();
+      // Proceed after triggering key selection
+    }
+
     setIsLoading(true);
     setExplanation(null);
 
     try {
+      // Create a new instance right before the call to use the latest key
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || process.env.GEMINI_API_KEY });
+      
       const prompt = mode === 'simple' 
         ? `Explain "${input}" like I'm 10 years old with simple analogies.`
         : mode === 'detailed'
@@ -24,14 +59,19 @@ export const AIHelper: React.FC = () => {
         : `Create structured study notes for "${input}" including bullet points and a summary.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-pro-preview",
         contents: prompt,
       });
 
       setExplanation(response.text || "Sorry, I couldn't generate an explanation.");
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Error:", error);
-      setExplanation("An error occurred while generating the explanation. Please try again.");
+      if (error.message?.includes("Requested entity was not found")) {
+        setHasKey(false);
+        setExplanation("Gemini API key error. Please select a valid key and try again.");
+      } else {
+        setExplanation("An error occurred while generating the explanation. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -39,10 +79,37 @@ export const AIHelper: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 mb-6">
-        <Sparkles className="text-purple-400" size={24} />
-        <h2 className="text-2xl font-bold text-white">AI Explainer</h2>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <Sparkles className="text-purple-400" size={24} />
+          <h2 className="text-2xl font-bold text-white">AI Explainer</h2>
+        </div>
+        {!hasKey && (
+          <button 
+            onClick={handleConnectKey}
+            className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-purple-400 hover:text-purple-300 transition-colors"
+          >
+            <Key size={12} />
+            Connect Pro
+          </button>
+        )}
       </div>
+
+      {!hasKey && (
+        <div className="mb-6 p-4 bg-purple-500/10 border border-purple-500/20 rounded-2xl">
+          <p className="text-xs text-purple-200/60 mb-3">
+            To use Gemini 3.1 Pro, you need to select a paid API key from your Google Cloud project.
+          </p>
+          <a 
+            href="https://ai.google.dev/gemini-api/docs/billing" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-[10px] font-bold text-purple-400 hover:underline"
+          >
+            Learn about billing <ExternalLink size={10} />
+          </a>
+        </div>
+      )}
 
       <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
         <textarea 
@@ -81,7 +148,7 @@ export const AIHelper: React.FC = () => {
             className="bg-purple-500 hover:bg-purple-600 disabled:opacity-50 disabled:hover:bg-purple-500 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all font-bold text-sm"
           >
             {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
-            Explain
+            {hasKey ? 'Explain with Pro' : 'Connect & Explain'}
           </button>
         </div>
       </div>

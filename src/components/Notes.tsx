@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Plus, Trash2, Tag } from 'lucide-react';
 import { Note, Subject } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { db, auth } from '../firebase';
 
 const SUBJECT_COLORS: Record<Subject, string> = {
   Math: 'bg-blue-500',
@@ -21,23 +23,53 @@ export const Notes: React.FC = () => {
     subject: 'Other',
   });
 
-  const addNote = () => {
-    if (!newNote.title || !newNote.content) return;
-    const note: Note = {
-      id: Math.random().toString(36).substr(2, 9),
-      title: newNote.title,
-      content: newNote.content,
-      subject: newNote.subject as Subject,
-      color: SUBJECT_COLORS[newNote.subject as Subject],
-      createdAt: Date.now(),
-    };
-    setNotes([note, ...notes]);
-    setNewNote({ title: '', content: '', subject: 'Other' });
-    setIsAdding(false);
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const q = query(
+      collection(db, 'notes'),
+      where('uid', '==', auth.currentUser.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const notesData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Note[];
+      setNotes(notesData);
+    }, (error) => {
+      console.error("Firestore Error (Notes):", error);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const addNote = async () => {
+    if (!newNote.title || !newNote.content || !auth.currentUser) return;
+    
+    try {
+      await addDoc(collection(db, 'notes'), {
+        uid: auth.currentUser.uid,
+        title: newNote.title,
+        content: newNote.content,
+        subject: newNote.subject as Subject,
+        color: SUBJECT_COLORS[newNote.subject as Subject],
+        createdAt: Date.now(),
+      });
+      setNewNote({ title: '', content: '', subject: 'Other' });
+      setIsAdding(false);
+    } catch (error) {
+      console.error("Error adding note:", error);
+    }
   };
 
-  const deleteNote = (id: string) => {
-    setNotes(notes.filter(n => n.id !== id));
+  const deleteNote = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'notes', id));
+    } catch (error) {
+      console.error("Error deleting note:", error);
+    }
   };
 
   const filteredNotes = notes.filter(n => 

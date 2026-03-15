@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, ChevronLeft, ChevronRight, RotateCw, Brain } from 'lucide-react';
 import { Flashcard, Subject } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { db, auth } from '../firebase';
 
 const SUBJECT_COLORS: Record<Subject, string> = {
   Math: 'bg-blue-500',
@@ -22,25 +24,54 @@ export const Flashcards: React.FC = () => {
     subject: 'Other',
   });
 
-  const addCard = () => {
-    if (!newCard.front || !newCard.back) return;
-    const card: Flashcard = {
-      id: Math.random().toString(36).substr(2, 9),
-      front: newCard.front,
-      back: newCard.back,
-      subject: newCard.subject as Subject,
-      createdAt: Date.now(),
-    };
-    setCards([...cards, card]);
-    setNewCard({ front: '', back: '', subject: 'Other' });
-    setIsAdding(false);
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const q = query(
+      collection(db, 'flashcards'),
+      where('uid', '==', auth.currentUser.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const cardsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Flashcard[];
+      setCards(cardsData);
+    }, (error) => {
+      console.error("Firestore Error (Flashcards):", error);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const addCard = async () => {
+    if (!newCard.front || !newCard.back || !auth.currentUser) return;
+    
+    try {
+      await addDoc(collection(db, 'flashcards'), {
+        uid: auth.currentUser.uid,
+        front: newCard.front,
+        back: newCard.back,
+        subject: newCard.subject as Subject,
+        createdAt: Date.now(),
+      });
+      setNewCard({ front: '', back: '', subject: 'Other' });
+      setIsAdding(false);
+    } catch (error) {
+      console.error("Error adding card:", error);
+    }
   };
 
-  const deleteCard = (id: string) => {
-    const newCards = cards.filter(c => c.id !== id);
-    setCards(newCards);
-    if (currentIndex >= newCards.length && newCards.length > 0) {
-      setCurrentIndex(newCards.length - 1);
+  const deleteCard = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'flashcards', id));
+      if (currentIndex >= cards.length - 1 && cards.length > 1) {
+        setCurrentIndex(cards.length - 2);
+      }
+    } catch (error) {
+      console.error("Error deleting card:", error);
     }
   };
 

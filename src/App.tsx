@@ -3,24 +3,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
-  BookOpen, 
   BarChart3, 
   User, 
   LogOut, 
   Search, 
   Bell,
-  GraduationCap
+  GraduationCap,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User as FirebaseUser } from 'firebase/auth';
+import { auth } from './firebase';
 import { Timer } from './components/Timer';
 import { Notes } from './components/Notes';
 import { AIHelper } from './components/AIHelper';
 import { Flashcards } from './components/Flashcards';
 import { Motivation } from './components/Motivation';
-import { MusicPlayer } from './components/MusicPlayer';
 import { Landing } from './components/Landing';
 import { StudyPlanner } from './components/StudyPlanner';
 
@@ -28,14 +29,53 @@ type Page = 'landing' | 'dashboard' | 'progress' | 'profile';
 
 export default function App() {
   const [activePage, setActivePage] = useState<Page>('landing');
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setIsAuthReady(true);
+      if (user) {
+        setActivePage('dashboard');
+      } else {
+        setActivePage('landing');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Login error:", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   const handleSessionComplete = (type: string, duration: number) => {
     console.log(`Session complete: ${type} for ${duration} mins`);
-    // Will integrate with Firebase later
   };
 
-  if (activePage === 'landing') {
-    return <Landing onStart={() => setActivePage('dashboard')} />;
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen bg-[#0a0a1a] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (activePage === 'landing' && !user) {
+    return <Landing onStart={handleLogin} />;
   }
 
   return (
@@ -71,7 +111,10 @@ export default function App() {
         </nav>
 
         <div className="p-4 border-t border-white/5">
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-white/40 hover:text-white hover:bg-white/5 rounded-xl transition-all">
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 text-white/40 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+          >
             <LogOut size={20} />
             <span className="font-medium hidden md:block">Logout</span>
           </button>
@@ -98,12 +141,12 @@ export default function App() {
             </button>
             <div className="flex items-center gap-3 pl-6 border-l border-white/5">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold">Alex Johnson</p>
+                <p className="text-sm font-bold">{user?.displayName || 'Student'}</p>
                 <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Student</p>
               </div>
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 p-[2px]">
                 <div className="w-full h-full rounded-full bg-[#0a0a1a] flex items-center justify-center overflow-hidden">
-                  <img src="https://picsum.photos/seed/student/100/100" alt="Avatar" referrerPolicy="no-referrer" />
+                  <img src={user?.photoURL || "https://picsum.photos/seed/student/100/100"} alt="Avatar" referrerPolicy="no-referrer" />
                 </div>
               </div>
             </div>
@@ -119,29 +162,32 @@ export default function App() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="grid grid-cols-1 xl:grid-cols-12 gap-8"
+                className="space-y-8"
               >
-                {/* Left Column: Timer & AI Helper */}
-                <div className="xl:col-span-4 space-y-8">
-                  <Timer onSessionComplete={handleSessionComplete} />
-                  <AIHelper />
+                {/* Top Row: Timer, Flashcards, Motivation & Planner */}
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+                  <div className="xl:col-span-4">
+                    <Timer onSessionComplete={handleSessionComplete} />
+                  </div>
+                  <div className="xl:col-span-5">
+                    <div className="bg-white/5 border border-white/10 rounded-3xl p-8 h-full">
+                      <Flashcards />
+                    </div>
+                  </div>
+                  <div className="xl:col-span-3 space-y-8">
+                    <Motivation />
+                    <StudyPlanner />
+                  </div>
                 </div>
 
-                {/* Middle Column: Notes & Flashcards */}
-                <div className="xl:col-span-5 space-y-8">
-                  <div className="bg-white/5 border border-white/10 rounded-3xl p-8 h-[450px]">
+                {/* Bottom Row: AI Explainer & Quick Notes */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-8 min-h-[500px]">
+                    <AIHelper />
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-8 min-h-[500px]">
                     <Notes />
                   </div>
-                  <div className="bg-white/5 border border-white/10 rounded-3xl p-8 h-[400px]">
-                    <Flashcards />
-                  </div>
-                </div>
-
-                {/* Right Column: Motivation & Music */}
-                <div className="xl:col-span-3 space-y-8">
-                  <Motivation />
-                  <MusicPlayer />
-                  <StudyPlanner />
                 </div>
               </motion.div>
             )}
