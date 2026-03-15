@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, ChevronLeft, ChevronRight, RotateCw, Brain } from 'lucide-react';
 import { Flashcard, Subject } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { supabase } from '../supabase';
+import { supabase, useLocalStorage } from '../supabase';
 
 const SUBJECT_COLORS: Record<Subject, string> = {
   Math: 'bg-blue-500',
@@ -26,20 +26,29 @@ export const Flashcards: React.FC = () => {
   useEffect(() => {
     fetchCards();
 
-    // Subscribe to changes
-    const channel = supabase
-      .channel('flashcards_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'flashcards' }, () => {
-        fetchCards();
-      })
-      .subscribe();
+    if (!useLocalStorage) {
+      const channel = supabase
+        .channel('flashcards_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'flashcards' }, () => {
+          fetchCards();
+        })
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, []);
 
   const fetchCards = async () => {
+    if (useLocalStorage) {
+      const localCards = localStorage.getItem('studyboost_flashcards');
+      if (localCards) {
+        setCards(JSON.parse(localCards));
+      }
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -57,8 +66,27 @@ export const Flashcards: React.FC = () => {
   };
 
   const addCard = async () => {
+    if (!newCard.front || !newCard.back) return;
+
+    if (useLocalStorage) {
+      const card: Flashcard = {
+        id: Math.random().toString(36).substr(2, 9),
+        uid: 'guest',
+        front: newCard.front,
+        back: newCard.back,
+        subject: newCard.subject as Subject,
+        createdAt: Date.now(),
+      };
+      const updatedCards = [card, ...cards];
+      setCards(updatedCards);
+      localStorage.setItem('studyboost_flashcards', JSON.stringify(updatedCards));
+      setNewCard({ front: '', back: '', subject: 'Other' });
+      setIsAdding(false);
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
-    if (!newCard.front || !newCard.back || !user) return;
+    if (!user) return;
     
     try {
       const { error } = await supabase.from('flashcards').insert([{
@@ -80,6 +108,16 @@ export const Flashcards: React.FC = () => {
   };
 
   const deleteCard = async (id: string) => {
+    if (useLocalStorage) {
+      const updatedCards = cards.filter(c => c.id !== id);
+      setCards(updatedCards);
+      localStorage.setItem('studyboost_flashcards', JSON.stringify(updatedCards));
+      if (currentIndex >= updatedCards.length && updatedCards.length > 0) {
+        setCurrentIndex(updatedCards.length - 1);
+      }
+      return;
+    }
+
     try {
       const { error } = await supabase.from('flashcards').delete().eq('id', id);
       if (error) throw error;

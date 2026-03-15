@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { GraduationCap, Timer, BookOpen, Brain, Sparkles, Mail, Lock, User as UserIcon, AlertCircle, Loader2 } from 'lucide-react';
-import { supabase } from '../supabase';
+import { supabase, isConfigured, useLocalStorage } from '../supabase';
 
 export const Landing: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -11,9 +11,20 @@ export const Landing: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const handleGuestMode = () => {
+    localStorage.setItem('studyboost_guest_mode', 'true');
+    window.location.reload();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!isConfigured) {
+      setError("Supabase is not correctly configured. Please ensure you have set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the Settings menu. Note: The Anon Key should be a long string starting with 'eyJ'.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -36,8 +47,13 @@ export const Landing: React.FC = () => {
         if (error) throw error;
       }
     } catch (err: any) {
-      console.error("Auth error:", err);
-      setError(err.message || "An error occurred during authentication.");
+      console.error("Auth error details:", {
+        message: err.message,
+        name: err.name,
+        stack: err.stack,
+        err
+      });
+      setError(err.message || "An error occurred during authentication. Please check your internet connection or Supabase configuration.");
     } finally {
       setIsLoading(false);
     }
@@ -169,6 +185,16 @@ export const Landing: React.FC = () => {
                     isLogin ? 'Sign In' : 'Create Account'
                   )}
                 </button>
+
+                {useLocalStorage && (
+                  <button 
+                    type="button"
+                    onClick={handleGuestMode}
+                    className="w-full bg-white/5 hover:bg-white/10 text-white/60 py-4 rounded-2xl font-bold text-sm transition-all border border-white/10 flex items-center justify-center gap-2"
+                  >
+                    Continue as Guest (Offline Mode)
+                  </button>
+                )}
               </form>
 
               <div className="mt-8 text-center">

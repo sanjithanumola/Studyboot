@@ -2,6 +2,7 @@ export type Subject = 'Math' | 'Science' | 'History' | 'Coding' | 'Other';
 
 export interface Note {
   id: string;
+  uid: string;
   title: string;
   content: string;
   subject: Subject;
@@ -11,9 +12,19 @@ export interface Note {
 
 export interface Flashcard {
   id: string;
+  uid: string;
   front: string;
   back: string;
   subject: Subject;
+  createdAt: number;
+}
+
+export interface StudyPlan {
+  id: string;
+  uid: string;
+  day: string;
+  subject: string;
+  status: 'completed' | 'pending';
   createdAt: number;
 }
 

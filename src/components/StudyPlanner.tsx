@@ -1,40 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Plus, CheckCircle2, Circle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { supabase } from '../supabase';
-
-interface PlanItem {
-  id: string;
-  day: string;
-  subject: string;
-  status: 'completed' | 'pending';
-  createdAt: number;
-}
+import { supabase, useLocalStorage } from '../supabase';
+import { StudyPlan } from '../types';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export const StudyPlanner: React.FC = () => {
-  const [plans, setPlans] = useState<PlanItem[]>([]);
+  const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newPlan, setNewPlan] = useState({ day: 'Mon', subject: '' });
 
   useEffect(() => {
     fetchPlans();
 
-    // Subscribe to changes
-    const channel = supabase
-      .channel('planner_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'planner' }, () => {
-        fetchPlans();
-      })
-      .subscribe();
+    if (!useLocalStorage) {
+      const channel = supabase
+        .channel('planner_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'planner' }, () => {
+          fetchPlans();
+        })
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, []);
 
   const fetchPlans = async () => {
+    if (useLocalStorage) {
+      const localPlans = localStorage.getItem('studyboost_plans');
+      if (localPlans) {
+        setPlans(JSON.parse(localPlans));
+      }
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -47,13 +49,32 @@ export const StudyPlanner: React.FC = () => {
     if (error) {
       console.error("Supabase Error (Planner):", error);
     } else {
-      setPlans(data as PlanItem[]);
+      setPlans(data as StudyPlan[]);
     }
   };
 
   const addPlan = async () => {
+    if (!newPlan.subject) return;
+
+    if (useLocalStorage) {
+      const plan: StudyPlan = {
+        id: Math.random().toString(36).substr(2, 9),
+        uid: 'guest',
+        day: newPlan.day,
+        subject: newPlan.subject,
+        status: 'pending',
+        createdAt: Date.now(),
+      };
+      const updatedPlans = [...plans, plan];
+      setPlans(updatedPlans);
+      localStorage.setItem('studyboost_plans', JSON.stringify(updatedPlans));
+      setNewPlan({ day: 'Mon', subject: '' });
+      setIsAdding(false);
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
-    if (!newPlan.subject || !user) return;
+    if (!user) return;
     
     try {
       const { error } = await supabase.from('planner').insert([{
@@ -75,10 +96,19 @@ export const StudyPlanner: React.FC = () => {
   };
 
   const toggleStatus = async (id: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+
+    if (useLocalStorage) {
+      const updatedPlans = plans.map(p => p.id === id ? { ...p, status: newStatus } : p);
+      setPlans(updatedPlans);
+      localStorage.setItem('studyboost_plans', JSON.stringify(updatedPlans));
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('planner')
-        .update({ status: currentStatus === 'completed' ? 'pending' : 'completed' })
+        .update({ status: newStatus })
         .eq('id', id);
 
       if (error) throw error;

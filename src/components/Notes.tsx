@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Trash2, Tag } from 'lucide-react';
 import { Note, Subject } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { supabase } from '../supabase';
+import { supabase, useLocalStorage } from '../supabase';
 
 const SUBJECT_COLORS: Record<Subject, string> = {
   Math: 'bg-blue-500',
@@ -25,20 +25,29 @@ export const Notes: React.FC = () => {
   useEffect(() => {
     fetchNotes();
 
-    // Subscribe to changes
-    const channel = supabase
-      .channel('notes_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, () => {
-        fetchNotes();
-      })
-      .subscribe();
+    if (!useLocalStorage) {
+      const channel = supabase
+        .channel('notes_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, () => {
+          fetchNotes();
+        })
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, []);
 
   const fetchNotes = async () => {
+    if (useLocalStorage) {
+      const localNotes = localStorage.getItem('studyboost_notes');
+      if (localNotes) {
+        setNotes(JSON.parse(localNotes));
+      }
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -56,8 +65,28 @@ export const Notes: React.FC = () => {
   };
 
   const addNote = async () => {
+    if (!newNote.title || !newNote.content) return;
+
+    if (useLocalStorage) {
+      const note: Note = {
+        id: Math.random().toString(36).substr(2, 9),
+        uid: 'guest',
+        title: newNote.title,
+        content: newNote.content,
+        subject: newNote.subject as Subject,
+        color: SUBJECT_COLORS[newNote.subject as Subject],
+        createdAt: Date.now(),
+      };
+      const updatedNotes = [note, ...notes];
+      setNotes(updatedNotes);
+      localStorage.setItem('studyboost_notes', JSON.stringify(updatedNotes));
+      setNewNote({ title: '', content: '', subject: 'Other' });
+      setIsAdding(false);
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
-    if (!newNote.title || !newNote.content || !user) return;
+    if (!user) return;
     
     try {
       const { error } = await supabase.from('notes').insert([{
@@ -80,6 +109,13 @@ export const Notes: React.FC = () => {
   };
 
   const deleteNote = async (id: string) => {
+    if (useLocalStorage) {
+      const updatedNotes = notes.filter(n => n.id !== id);
+      setNotes(updatedNotes);
+      localStorage.setItem('studyboost_notes', JSON.stringify(updatedNotes));
+      return;
+    }
+
     try {
       const { error } = await supabase.from('notes').delete().eq('id', id);
       if (error) throw error;

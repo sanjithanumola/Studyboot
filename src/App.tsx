@@ -15,7 +15,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { supabase } from './supabase';
+import { supabase, useLocalStorage } from './supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { Timer } from './components/Timer';
 import { Notes } from './components/Notes';
@@ -33,6 +33,16 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
+    if (useLocalStorage) {
+      setIsAuthReady(true);
+      // Check if user has already "entered" guest mode
+      const isGuest = localStorage.getItem('studyboost_guest_mode');
+      if (isGuest) {
+        setActivePage('dashboard');
+      }
+      return;
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -58,6 +68,12 @@ export default function App() {
   }, []);
 
   const handleLogout = async () => {
+    if (useLocalStorage) {
+      localStorage.removeItem('studyboost_guest_mode');
+      window.location.reload();
+      return;
+    }
+
     try {
       await supabase.auth.signOut();
     } catch (error) {
