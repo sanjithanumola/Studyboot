@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { GraduationCap, Timer, BookOpen, Brain, Sparkles, Mail, Lock, User as UserIcon, AlertCircle, Loader2 } from 'lucide-react';
-import { supabase, isConfigured, useLocalStorage } from '../supabase';
+import { supabase, isConfigured, useLocalStorage, isStripeKeyError } from '../supabase';
 
 export const Landing: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -19,6 +19,11 @@ export const Landing: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (isStripeKeyError) {
+      setError("CRITICAL CONFIG ERROR: The key you provided is a Stripe Publishable Key, not a Supabase Anon Key. Please go to your Supabase Dashboard > Settings > API and copy the 'anon' 'public' key (starts with 'eyJ').");
+      return;
+    }
 
     if (!isConfigured) {
       setError("Supabase is not correctly configured. Please ensure you have set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the Settings menu. Note: The Anon Key should be a long string starting with 'eyJ'.");
@@ -133,6 +138,26 @@ export const Landing: React.FC = () => {
                         placeholder="John Doe"
                         className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm focus:outline-none focus:border-purple-500/50 transition-all"
                       />
+                    </div>
+                  </div>
+                )}
+
+                {isStripeKeyError && (
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-6">
+                    <div className="flex items-center gap-2 text-amber-400 font-bold text-sm mb-2">
+                      <AlertCircle size={18} />
+                      <span>Configuration Help Required</span>
+                    </div>
+                    <div className="text-white/60 text-xs leading-relaxed">
+                      The key you entered starts with <code className="bg-white/10 px-1 rounded text-amber-300">sb_publishable_</code>. This is a <strong>Stripe</strong> key. 
+                      <br /><br />
+                      To fix this:
+                      <ol className="list-decimal ml-4 mt-2 space-y-1">
+                        <li>Go to your <strong>Supabase Dashboard</strong></li>
+                        <li>Navigate to <strong>Settings &gt; API</strong></li>
+                        <li>Copy the <strong>anon public</strong> key (starts with <code className="bg-white/10 px-1 rounded text-purple-300">eyJ</code>)</li>
+                        <li>Update the <strong>VITE_SUPABASE_ANON_KEY</strong> in your app settings.</li>
+                      </ol>
                     </div>
                   </div>
                 )}

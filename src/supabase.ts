@@ -27,7 +27,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const isConfigured = isValidUrl(supabaseUrl) && supabaseAnonKey && supabaseAnonKey.length > 10;
 
-if (supabaseAnonKey.startsWith('sb_publishable') || supabaseAnonKey.startsWith('pk_')) {
+const isStripeKeyError = !!supabaseAnonKey && (supabaseAnonKey.startsWith('sb_publishable') || supabaseAnonKey.startsWith('pk_'));
+
+if (isStripeKeyError) {
   console.error('CRITICAL: The VITE_SUPABASE_ANON_KEY provided looks like a Stripe Publishable Key, not a Supabase Anon Key. Supabase keys usually start with "eyJ".');
 }
 
@@ -37,6 +39,6 @@ const finalKey = supabaseAnonKey || 'placeholder';
 export const supabase = createClient(finalUrl, finalKey);
 
 // Helper to check if we should use local storage fallback
-export const useLocalStorage = !isConfigured;
+export const useLocalStorage = !isConfigured || isStripeKeyError;
 
-export { isConfigured };
+export { isConfigured, isStripeKeyError };
