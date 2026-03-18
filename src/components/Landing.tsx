@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { GraduationCap, Timer, BookOpen, Brain, Sparkles, Mail, Lock, User as UserIcon, AlertCircle, Loader2 } from 'lucide-react';
-import { supabase, isConfigured, useLocalStorage, isStripeKeyError } from '../supabase';
+import { supabase, isConfigured, useLocalStorage, isStripeKeyError, supabaseUrl, supabaseAnonKey } from '../supabase';
 
 export const Landing: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -10,6 +10,7 @@ export const Landing: React.FC = () => {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
 
   const handleGuestMode = () => {
     localStorage.setItem('studyboost_guest_mode', 'true');
@@ -21,12 +22,12 @@ export const Landing: React.FC = () => {
     setError(null);
 
     if (isStripeKeyError) {
-      setError("CRITICAL CONFIG ERROR: The key you provided is a Stripe Publishable Key, not a Supabase Anon Key. Please go to your Supabase Dashboard > Settings > API and copy the 'anon' 'public' key (starts with 'eyJ').");
+      setError("The key in your settings is a Stripe key (starts with 'sb_'). Please replace it with your Supabase 'anon' key (starts with 'eyJ').");
       return;
     }
 
     if (!isConfigured) {
-      setError("Supabase is not correctly configured. Please ensure you have set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the Settings menu. Note: The Anon Key should be a long string starting with 'eyJ'.");
+      setError("Database not connected. Please check your Supabase URL and Anon Key in the Settings > Secrets menu.");
       return;
     }
 
@@ -222,15 +223,43 @@ export const Landing: React.FC = () => {
                 )}
               </form>
 
-              <div className="mt-8 text-center">
-                <button 
-                  onClick={() => setIsLogin(!isLogin)}
-                  className="text-sm text-white/40 hover:text-white transition-colors"
-                >
-                  {isLogin ? "Don't have an account? " : "Already have an account? "}
-                  <span className="text-purple-400 font-bold">{isLogin ? 'Sign Up' : 'Log In'}</span>
-                </button>
-              </div>
+                <div className="mt-8 text-center space-y-4">
+                  <button 
+                    onClick={() => setIsLogin(!isLogin)}
+                    className="text-sm text-white/40 hover:text-white transition-colors block w-full"
+                  >
+                    {isLogin ? "Don't have an account? " : "Already have an account? "}
+                    <span className="text-purple-400 font-bold">{isLogin ? 'Sign Up' : 'Log In'}</span>
+                  </button>
+
+                  <button 
+                    onClick={() => setShowDebug(!showDebug)}
+                    className="text-[10px] text-white/10 hover:text-white/30 transition-colors uppercase tracking-widest"
+                  >
+                    {showDebug ? 'Hide Debug Info' : 'Show Connection Status'}
+                  </button>
+
+                  {showDebug && (
+                    <div className="text-left bg-black/40 rounded-xl p-4 font-mono text-[10px] space-y-1 border border-white/5">
+                      <div className="flex justify-between">
+                        <span className="text-white/30">URL:</span>
+                        <span className={supabaseUrl ? 'text-emerald-400' : 'text-red-400'}>
+                          {supabaseUrl ? `${supabaseUrl.substring(0, 15)}...` : 'Missing'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-white/30">Key Type:</span>
+                        <span className={isStripeKeyError ? 'text-amber-400' : (isConfigured ? 'text-emerald-400' : 'text-red-400')}>
+                          {isStripeKeyError ? 'Stripe (Wrong)' : (isConfigured ? 'Supabase (OK)' : 'Invalid')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-white/30">Key Prefix:</span>
+                        <span className="text-white/60">{supabaseAnonKey ? `${supabaseAnonKey.substring(0, 6)}...` : 'None'}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
             </motion.div>
           </div>
         </div>

@@ -19,26 +19,19 @@ const isValidUrl = (url: string) => {
   }
 };
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase configuration is missing or incomplete.');
-} else {
-  console.log('Supabase attempting connection to:', supabaseUrl.substring(0, 20) + '...');
-}
-
-const isConfigured = isValidUrl(supabaseUrl) && supabaseAnonKey && supabaseAnonKey.length > 10;
-
 const isStripeKeyError = !!supabaseAnonKey && (supabaseAnonKey.startsWith('sb_publishable') || supabaseAnonKey.startsWith('pk_'));
+const isConfigured = isValidUrl(supabaseUrl) && !!supabaseAnonKey && supabaseAnonKey.length > 20 && !isStripeKeyError;
 
 if (isStripeKeyError) {
-  console.error('CRITICAL: The VITE_SUPABASE_ANON_KEY provided looks like a Stripe Publishable Key, not a Supabase Anon Key. Supabase keys usually start with "eyJ".');
+  console.warn('Configuration Note: The VITE_SUPABASE_ANON_KEY provided appears to be a Stripe key. Supabase keys typically start with "eyJ". Cloud sync will be disabled until a valid Supabase key is provided.');
 }
 
 const finalUrl = isValidUrl(supabaseUrl) ? supabaseUrl : 'https://placeholder.supabase.co';
-const finalKey = supabaseAnonKey || 'placeholder';
+const finalKey = isConfigured ? supabaseAnonKey : 'placeholder';
 
 export const supabase = createClient(finalUrl, finalKey);
 
 // Helper to check if we should use local storage fallback
-export const useLocalStorage = !isConfigured || isStripeKeyError;
+export const useLocalStorage = !isConfigured;
 
-export { isConfigured, isStripeKeyError };
+export { isConfigured, isStripeKeyError, supabaseUrl, supabaseAnonKey };
